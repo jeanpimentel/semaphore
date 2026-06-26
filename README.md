@@ -52,9 +52,9 @@ You don't need a terminal for normal use after install.
 ## Quick start
 
 1. **Download** a release for your OS (or [build from source](#development))
-2. **Launch Semaphore** — it stays in the system tray and shows the floating widget
+2. **Launch Semaphore**. It stays in the system tray and shows the floating widget
 3. **Complete onboarding** (first launch) or open **Settings** and connect your AI tools
-4. **Use your tools normally** — hooks update the light automatically
+4. **Use your tools normally**. Hooks update the light automatically
 
 To connect tools from the terminal instead:
 
@@ -69,13 +69,13 @@ semctl doctor
 
 ### Move the widget
 
-**Click and drag the traffic light body** (the dark housing with the three lights). Do not drag the empty space around it — grab the semáforo itself.
+**Click and drag the traffic light body** (the dark housing with the three lights). Do not drag the empty space around it; grab the semáforo itself.
 
 On hover, a tooltip shows *"Click and drag here to move"* (or the Portuguese equivalent).
 
 ### Settings
 
-Open settings in either way:
+Open settings from:
 
 - **Hover** the widget and click the **⚙** button (top-right corner)
 - **Right-click** the tray icon → **Settings**
@@ -104,14 +104,14 @@ Right-click the Semaphore icon in the system tray:
 | **Always on Top** | Keep the widget above other windows (not in macOS fullscreen) |
 | **Horizontal** | Rotate the traffic light to a horizontal layout |
 | **Test Lights** | Play a short melody and cycle green, yellow, and red |
-| **Play Genius** | Memory game — repeat the light sequence by clicking the lights |
+| **Play Genius** | Memory game: repeat the light sequence by clicking the lights |
 | **Quit** | Exit Semaphore |
 
 Left-click the tray icon to show/focus the widget.
 
 ### Onboarding
 
-On first launch, a welcome window walks you through connecting tools and positioning the widget. You can replay it anytime from **Settings → About → Restart onboarding**.
+On first launch, onboarding helps you connect tools and position the widget. Replay it from **Settings → About → Restart onboarding**.
 
 ### Launch with tools
 
