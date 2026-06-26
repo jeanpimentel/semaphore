@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use sem_core::config::{window_dimensions, Config};
 use sem_core::ipc::{IpcServer, PruneTask};
-use sem_core::state::{LightState, StateMachine};
+use sem_core::state::{LightState, StateMachine, StateSnapshot};
 use sem_core::theme::light_rgb;
 use semctl::detect::{self, ToolStatus};
 use semctl::install;
@@ -19,6 +19,7 @@ use tokio::sync::RwLock;
 #[derive(Clone, serde::Serialize)]
 struct StatePayload {
     state: String,
+    awaiting_input: bool,
 }
 
 struct LightTestRunning(AtomicBool);
@@ -26,6 +27,9 @@ struct GeniusGameRunning(AtomicBool);
 struct IpcStateMachine(Arc<RwLock<StateMachine>>);
 
 const LIGHT_TEST_STEP_MS: u64 = 480;
+/// Matches `.housing.awaiting-input .light { animation: awaiting-pulse 1.2s ... }`
+const AWAITING_INPUT_BLINK_CYCLE_MS: u64 = 1200;
+const LIGHT_TEST_AWAITING_INPUT_BLINKS: u64 = 3;
 
 fn light_state_name(state: LightState) -> &'static str {
     match state {
@@ -35,9 +39,10 @@ fn light_state_name(state: LightState) -> &'static str {
     }
 }
 
-fn state_payload(state: LightState) -> StatePayload {
+fn state_payload(snapshot: StateSnapshot) -> StatePayload {
     StatePayload {
-        state: light_state_name(state).to_string(),
+        state: light_state_name(snapshot.state).to_string(),
+        awaiting_input: snapshot.awaiting_input,
     }
 }
 
@@ -46,7 +51,21 @@ fn preview_light(app: &AppHandle, state: LightState) {
     if let Some(tray) = app.tray_by_id(TRAY_ICON_ID) {
         let _ = tray.set_icon(Some(circle_tray_icon(state, &theme)));
     }
-    let _ = app.emit("light-preview", state_payload(state));
+    let _ = app.emit("light-preview", state_payload(StateSnapshot {
+        state,
+        awaiting_input: false,
+    }));
+}
+
+fn preview_awaiting_input(app: &AppHandle) {
+    let theme = Config::load().theme;
+    if let Some(tray) = app.tray_by_id(TRAY_ICON_ID) {
+        let _ = tray.set_icon(Some(circle_tray_icon(LightState::Green, &theme)));
+    }
+    let _ = app.emit("light-preview", state_payload(StateSnapshot {
+        state: LightState::Green,
+        awaiting_input: true,
+    }));
 }
 
 async fn run_light_test(app: AppHandle) {
@@ -64,11 +83,6 @@ async fn run_light_test(app: AppHandle) {
         return;
     }
 
-    let original = app
-        .try_state::<TrayLight>()
-        .map(|tray_light| *tray_light.0.read().unwrap_or_else(|e| e.into_inner()))
-        .unwrap_or(LightState::Green);
-
     focus_main_window(&app);
     let _ = app.emit("test-lights-start", ());
 
@@ -77,7 +91,19 @@ async fn run_light_test(app: AppHandle) {
         tokio::time::sleep(Duration::from_millis(LIGHT_TEST_STEP_MS)).await;
     }
 
-    preview_light(&app, original);
+    preview_awaiting_input(&app);
+    tokio::time::sleep(Duration::from_millis(
+        AWAITING_INPUT_BLINK_CYCLE_MS * LIGHT_TEST_AWAITING_INPUT_BLINKS,
+    ))
+    .await;
+
+    let snapshot = if let Some(sm) = app.try_state::<IpcStateMachine>() {
+        let guard = sm.0.read().await;
+        guard.snapshot()
+    } else {
+        StateSnapshot::default()
+    };
+    emit_state(&app, snapshot);
 
     let _ = app.emit("test-lights-end", ());
     if let Some(running) = app.try_state::<LightTestRunning>() {
@@ -114,7 +140,10 @@ async fn start_genius_game(app: AppHandle) {
         .unwrap_or(LightState::Green);
 
     focus_main_window(&app);
-    let _ = app.emit("genius-game-start", state_payload(original));
+    let _ = app.emit("genius-game-start", state_payload(StateSnapshot {
+        state: original,
+        awaiting_input: false,
+    }));
 }
 
 #[tauri::command]
@@ -134,15 +163,15 @@ async fn end_genius_game(app: AppHandle) -> Result<String, String> {
         running.0.store(false, Ordering::SeqCst);
     }
 
-    let state = if let Some(sm) = app.try_state::<IpcStateMachine>() {
+    let snapshot = if let Some(sm) = app.try_state::<IpcStateMachine>() {
         let guard = sm.0.read().await;
-        guard.aggregated()
+        guard.snapshot()
     } else {
-        LightState::Green
+        StateSnapshot::default()
     };
 
-    emit_state(&app, state);
-    Ok(light_state_name(state).to_string())
+    emit_state(&app, snapshot);
+    Ok(light_state_name(snapshot.state).to_string())
 }
 
 #[tauri::command]
@@ -265,7 +294,7 @@ const ALLOWED_SOUND_EXTENSIONS: &[&str] = &["mp3", "wav", "ogg", "m4a", "aac", "
 #[tauri::command]
 fn import_stage_sound(stage: String, source_path: String) -> Result<String, String> {
     let stage = stage.as_str();
-    if !matches!(stage, "green" | "yellow" | "red") {
+    if !matches!(stage, "green" | "yellow" | "red" | "awaiting_input") {
         return Err("invalid stage".to_string());
     }
 
@@ -353,14 +382,14 @@ fn refresh_tray_icon(app: &AppHandle) {
     }
 }
 
-fn emit_state(app: &AppHandle, state: LightState) {
+fn emit_state(app: &AppHandle, snapshot: StateSnapshot) {
     if let Some(tray_light) = app.try_state::<TrayLight>() {
         if let Ok(mut current) = tray_light.0.write() {
-            *current = state;
+            *current = snapshot.state;
         }
     }
 
-    let payload = state_payload(state);
+    let payload = state_payload(snapshot);
     let _ = app.emit("state-changed", payload);
     refresh_tray_icon(app);
 }
@@ -516,7 +545,7 @@ fn start_ipc(app: &AppHandle, machine: Arc<RwLock<StateMachine>>) {
     tauri::async_runtime::spawn(async move {
         loop {
             match rx.recv().await {
-                Ok(state) => emit_state(&app_handle, state),
+                Ok(snapshot) => emit_state(&app_handle, snapshot),
                 Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
                 Err(_) => break,
             }
