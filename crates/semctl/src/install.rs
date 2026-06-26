@@ -5,21 +5,25 @@ use sem_core::config::Config;
 
 const MARKER: &str = "_semaphore";
 
+const ALL_TOOLS: &[&str] = &[
+    "cursor",
+    "claude-code",
+    "codex",
+    "gemini-cli",
+    "copilot-cli",
+];
+
 pub fn run_install(all: bool, tool: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
     ensure_binaries()?;
 
     let tools: Vec<&str> = if all {
-        vec!["cursor", "claude-code"]
+        ALL_TOOLS.to_vec()
     } else {
         vec![tool.ok_or("specify a tool or use --all")?]
     };
 
     for tool in tools {
-        match tool {
-            "cursor" => install_cursor()?,
-            "claude-code" => install_claude_code()?,
-            other => return Err(format!("unknown tool: {other}").into()),
-        }
+        install_tool(tool)?;
         println!("installed hooks for {tool}");
     }
     Ok(())
@@ -27,20 +31,42 @@ pub fn run_install(all: bool, tool: Option<&str>) -> Result<(), Box<dyn std::err
 
 pub fn run_uninstall(all: bool, tool: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
     let tools: Vec<&str> = if all {
-        vec!["cursor", "claude-code"]
+        ALL_TOOLS.to_vec()
     } else {
         vec![tool.ok_or("specify a tool or use --all")?]
     };
 
     for tool in tools {
-        match tool {
-            "cursor" => uninstall_cursor()?,
-            "claude-code" => uninstall_claude_code()?,
-            other => return Err(format!("unknown tool: {other}").into()),
-        }
+        uninstall_tool(tool)?;
         println!("removed hooks for {tool}");
     }
     Ok(())
+}
+
+fn install_tool(tool: &str) -> Result<(), Box<dyn std::error::Error>> {
+    match tool {
+        "cursor" => install_cursor(),
+        "claude-code" => install_claude_code(),
+        "codex" => install_codex(),
+        "gemini-cli" => install_gemini_cli(),
+        "copilot-cli" => install_copilot_cli(),
+        other => Err(format!("unknown tool: {other}").into()),
+    }
+}
+
+fn uninstall_tool(tool: &str) -> Result<(), Box<dyn std::error::Error>> {
+    match tool {
+        "cursor" => uninstall_cursor(),
+        "claude-code" => uninstall_claude_code(),
+        "codex" => uninstall_codex(),
+        "gemini-cli" => uninstall_gemini_cli(),
+        "copilot-cli" => uninstall_copilot_cli(),
+        other => Err(format!("unknown tool: {other}").into()),
+    }
+}
+
+pub fn prepare_runtime() -> Result<(), Box<dyn std::error::Error>> {
+    ensure_binaries()
 }
 
 fn ensure_binaries() -> Result<(), Box<dyn std::error::Error>> {
@@ -51,6 +77,8 @@ fn ensure_binaries() -> Result<(), Box<dyn std::error::Error>> {
     if !sem_hook_path.exists() {
         write_sem_hook(&sem_hook_path)?;
     }
+
+    let _ = crate::deploy::deploy_semctl();
     Ok(())
 }
 
@@ -65,10 +93,14 @@ SOURCE="${3:-hook}"
 SESSION="default"
 if [ ! -t 0 ]; then
   INPUT="$(cat)"
-  PARSED="$(printf '%s' "$INPUT" | python3 -c 'import json,sys
-data=json.load(sys.stdin)
-print(data.get("session_id") or data.get("conversation_id") or data.get("sessionId") or "default")' 2>/dev/null || echo default)"
-  SESSION="$PARSED"
+  PARSED="$(printf '%s' "$INPUT" | sed -n 's/.*"session_id"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)"
+  if [ -z "$PARSED" ]; then
+    PARSED="$(printf '%s' "$INPUT" | sed -n 's/.*"conversation_id"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)"
+  fi
+  if [ -z "$PARSED" ]; then
+    PARSED="$(printf '%s' "$INPUT" | sed -n 's/.*"sessionId"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)"
+  fi
+  SESSION="${PARSED:-default}"
 fi
 SEMCTL="${SEMAPHORE_BIN:-$HOME/.semaphore/bin/semctl}"
 if [ -x "$SEMCTL" ]; then
@@ -134,6 +166,57 @@ fn uninstall_claude_code() -> Result<(), Box<dyn std::error::Error>> {
     remove_marked_hooks(&path, "hooks")
 }
 
+fn install_codex() -> Result<(), Box<dyn std::error::Error>> {
+    enable_codex_hooks()?;
+    let path = home_dir().join(".codex/hooks.json");
+    merge_codex_hooks(&path)
+}
+
+fn uninstall_codex() -> Result<(), Box<dyn std::error::Error>> {
+    let path = home_dir().join(".codex/hooks.json");
+    remove_marked_hooks(&path, "hooks")
+}
+
+fn install_gemini_cli() -> Result<(), Box<dyn std::error::Error>> {
+    let path = home_dir().join(".gemini/settings.json");
+    merge_gemini_hooks(&path)
+}
+
+fn uninstall_gemini_cli() -> Result<(), Box<dyn std::error::Error>> {
+    let path = home_dir().join(".gemini/settings.json");
+    remove_marked_hooks(&path, "hooks")
+}
+
+fn install_copilot_cli() -> Result<(), Box<dyn std::error::Error>> {
+    let path = home_dir().join(".copilot/hooks.json");
+    merge_copilot_hooks(&path)
+}
+
+fn uninstall_copilot_cli() -> Result<(), Box<dyn std::error::Error>> {
+    let path = home_dir().join(".copilot/hooks.json");
+    remove_marked_hooks(&path, "hooks")
+}
+
+fn enable_codex_hooks() -> Result<(), Box<dyn std::error::Error>> {
+    let path = home_dir().join(".codex/config.toml");
+    fs::create_dir_all(path.parent().unwrap())?;
+    let content = if path.exists() {
+        fs::read_to_string(&path)?
+    } else {
+        String::new()
+    };
+    if content.contains("codex_hooks") {
+        return Ok(());
+    }
+    let mut updated = content;
+    if !updated.ends_with('\n') && !updated.is_empty() {
+        updated.push('\n');
+    }
+    updated.push_str("\n[features]\ncodex_hooks = true\n");
+    fs::write(path, updated)?;
+    Ok(())
+}
+
 fn merge_cursor_hooks(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
     fs::create_dir_all(path.parent().unwrap())?;
     let mut root: serde_json::Value = if path.exists() {
@@ -158,11 +241,138 @@ fn merge_cursor_hooks(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
         Some("Write|Edit|Shell"),
     );
     insert_hook(hooks, "afterFileEdit", "red", "writing", None);
+    insert_hook(
+        hooks,
+        "postToolUse",
+        "yellow",
+        "thinking",
+        Some("Write|Edit"),
+    );
     insert_hook(hooks, "stop", "green", "idle", None);
     insert_hook(hooks, "sessionEnd", "green", "idle", None);
 
     fs::write(path, serde_json::to_string_pretty(&root)?)?;
     Ok(())
+}
+
+fn merge_codex_hooks(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    fs::create_dir_all(path.parent().unwrap())?;
+    let mut root: serde_json::Value = if path.exists() {
+        serde_json::from_str(&fs::read_to_string(path)?)?
+    } else {
+        serde_json::json!({ "hooks": {} })
+    };
+    let hooks = root
+        .as_object_mut()
+        .and_then(|o| o.get_mut("hooks"))
+        .and_then(|v| v.as_object_mut())
+        .ok_or("invalid codex hooks.json structure")?;
+
+    insert_codex_hook(hooks, "UserPromptSubmit", "yellow", "thinking", "");
+    insert_codex_hook(hooks, "PreToolUse", "red", "writing", "Bash");
+    insert_codex_hook(hooks, "PostToolUse", "yellow", "thinking", "");
+    insert_codex_hook(hooks, "Stop", "green", "idle", "");
+
+    fs::write(path, serde_json::to_string_pretty(&root)?)?;
+    Ok(())
+}
+
+fn merge_gemini_hooks(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    fs::create_dir_all(path.parent().unwrap())?;
+    let mut root: serde_json::Value = if path.exists() {
+        serde_json::from_str(&fs::read_to_string(path)?)?
+    } else {
+        serde_json::json!({ "hooks": {} })
+    };
+    let hooks = root
+        .as_object_mut()
+        .and_then(|o| o.get_mut("hooks"))
+        .and_then(|v| v.as_object_mut())
+        .ok_or("invalid gemini settings.json structure")?;
+
+    insert_gemini_hook(hooks, "BeforeAgent", "yellow", "thinking", "");
+    insert_gemini_hook(hooks, "BeforeModel", "yellow", "thinking", "");
+    insert_gemini_hook(hooks, "BeforeTool", "red", "writing", "write_.*");
+    insert_gemini_hook(hooks, "AfterTool", "yellow", "thinking", "");
+    insert_gemini_hook(hooks, "AfterAgent", "green", "idle", "");
+    insert_gemini_hook(hooks, "SessionEnd", "green", "idle", "");
+
+    fs::write(path, serde_json::to_string_pretty(&root)?)?;
+    Ok(())
+}
+
+fn merge_copilot_hooks(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    fs::create_dir_all(path.parent().unwrap())?;
+    let mut root: serde_json::Value = if path.exists() {
+        serde_json::from_str(&fs::read_to_string(path)?)?
+    } else {
+        serde_json::json!({ "hooks": {} })
+    };
+    let hooks = root
+        .as_object_mut()
+        .and_then(|o| o.get_mut("hooks"))
+        .and_then(|v| v.as_object_mut())
+        .ok_or("invalid copilot hooks.json structure")?;
+
+    insert_codex_hook(hooks, "UserPromptSubmit", "yellow", "thinking", "");
+    insert_codex_hook(hooks, "PreToolUse", "red", "writing", "Write|Edit|Bash");
+    insert_codex_hook(hooks, "PostToolUse", "yellow", "thinking", "");
+    insert_codex_hook(hooks, "Stop", "green", "idle", "");
+
+    fs::write(path, serde_json::to_string_pretty(&root)?)?;
+    Ok(())
+}
+
+fn insert_codex_hook(
+    hooks: &mut serde_json::Map<String, serde_json::Value>,
+    event: &str,
+    state: &str,
+    reason: &str,
+    matcher: &str,
+) {
+    insert_claude_hook(hooks, event, state, reason, matcher);
+}
+
+fn insert_gemini_hook(
+    hooks: &mut serde_json::Map<String, serde_json::Value>,
+    event: &str,
+    state: &str,
+    reason: &str,
+    matcher: &str,
+) {
+    let hook_entry = serde_json::json!({
+        "type": "command",
+        "command": hook_command(state, reason),
+        "_semaphore": true
+    });
+
+    let event_list = hooks
+        .entry(event.to_string())
+        .or_insert_with(|| serde_json::json!([]));
+
+    if matcher.is_empty() {
+        push_gemini_block(event_list, hook_entry, None);
+        return;
+    }
+    push_gemini_block(event_list, hook_entry, Some(matcher));
+}
+
+fn push_gemini_block(
+    event_list: &mut serde_json::Value,
+    hook_entry: serde_json::Value,
+    matcher: Option<&str>,
+) {
+    if let Some(arr) = event_list.as_array_mut() {
+        let exists = arr.iter().any(|block| block.get(MARKER) == Some(&serde_json::Value::Bool(true)));
+        if exists {
+            return;
+        }
+        let mut block = serde_json::json!({ "hooks": [hook_entry], "_semaphore": true });
+        if let Some(m) = matcher {
+            block["matcher"] = serde_json::Value::String(m.to_string());
+        }
+        arr.push(block);
+    }
 }
 
 fn merge_claude_hooks(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
