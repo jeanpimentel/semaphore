@@ -1,12 +1,14 @@
-use std::sync::Arc;
+use std::sync::{Arc, RwLock as StdRwLock};
 use std::time::Duration;
 
 use sem_core::config::{window_dimensions, Config};
 use sem_core::ipc::{IpcServer, PruneTask};
 use sem_core::state::{LightState, StateMachine};
+use sem_core::theme::light_rgb;
 use semctl::detect::{self, ToolStatus};
 use semctl::install;
 use tauri::{
+    image::Image,
     menu::{CheckMenuItem, Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     AppHandle, Emitter, LogicalSize, Manager, WebviewWindow,
@@ -24,8 +26,10 @@ fn get_config() -> Config {
 }
 
 #[tauri::command]
-fn save_config(config: Config) -> Result<(), String> {
-    config.save().map_err(|e| e.to_string())
+fn save_config(app: AppHandle, config: Config) -> Result<(), String> {
+    config.save().map_err(|e| e.to_string())?;
+    refresh_tray_icon(&app);
+    Ok(())
 }
 
 #[tauri::command]
@@ -174,7 +178,63 @@ fn import_stage_sound(stage: String, source_path: String) -> Result<String, Stri
         .ok_or_else(|| "invalid destination path".to_string())
 }
 
+const TRAY_ICON_ID: &str = "main";
+
+#[derive(Clone)]
+struct TrayLight(Arc<StdRwLock<LightState>>);
+
+fn circle_tray_icon(state: LightState, theme_name: &str) -> Image<'static> {
+    const SIZE: u32 = 44;
+    let (r, g, b) = light_rgb(theme_name, state);
+    let center = (SIZE as f32 - 1.0) / 2.0;
+    let radius = center - 1.5;
+
+    let mut rgba = vec![0u8; (SIZE * SIZE * 4) as usize];
+    for y in 0..SIZE {
+        for x in 0..SIZE {
+            let dx = x as f32 - center;
+            let dy = y as f32 - center;
+            let dist = (dx * dx + dy * dy).sqrt();
+            let alpha = if dist <= radius - 0.75 {
+                255.0
+            } else if dist <= radius + 0.75 {
+                ((radius + 0.75 - dist) / 1.5 * 255.0).clamp(0.0, 255.0)
+            } else {
+                0.0
+            };
+
+            if alpha > 0.0 {
+                let idx = ((y * SIZE + x) * 4) as usize;
+                rgba[idx] = r;
+                rgba[idx + 1] = g;
+                rgba[idx + 2] = b;
+                rgba[idx + 3] = alpha as u8;
+            }
+        }
+    }
+
+    Image::new_owned(rgba, SIZE, SIZE)
+}
+
+fn refresh_tray_icon(app: &AppHandle) {
+    let state = app
+        .try_state::<TrayLight>()
+        .map(|tray_light| *tray_light.0.read().unwrap_or_else(|e| e.into_inner()))
+        .unwrap_or(LightState::Green);
+    let theme = Config::load().theme;
+
+    if let Some(tray) = app.tray_by_id(TRAY_ICON_ID) {
+        let _ = tray.set_icon(Some(circle_tray_icon(state, &theme)));
+    }
+}
+
 fn emit_state(app: &AppHandle, state: LightState) {
+    if let Some(tray_light) = app.try_state::<TrayLight>() {
+        if let Ok(mut current) = tray_light.0.write() {
+            *current = state;
+        }
+    }
+
     let payload = StatePayload {
         state: match state {
             LightState::Green => "green".to_string(),
@@ -183,6 +243,7 @@ fn emit_state(app: &AppHandle, state: LightState) {
         },
     };
     let _ = app.emit("state-changed", payload);
+    refresh_tray_icon(app);
 }
 
 fn focus_main_window(app: &AppHandle) {
@@ -244,8 +305,8 @@ fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
         ],
     )?;
 
-    let _tray = TrayIconBuilder::new()
-        .icon(app.default_window_icon().unwrap().clone())
+    let _tray = TrayIconBuilder::with_id(TRAY_ICON_ID)
+        .icon(circle_tray_icon(LightState::Green, &config.theme))
         .menu(&menu)
         .on_menu_event(move |app, event| match event.id.as_ref() {
             "show" => focus_main_window(app),
@@ -365,6 +426,7 @@ pub fn run() {
             }
 
             let _ = install::prepare_runtime();
+            app.manage(TrayLight(Arc::new(StdRwLock::new(LightState::Green))));
             setup_tray(app.handle())?;
             start_ipc(app.handle(), machine_setup);
 
