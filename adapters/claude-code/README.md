@@ -7,5 +7,5 @@ Config: `~/.claude/settings.json` → `hooks`
 | `UserPromptSubmit` | yellow |
 | `PreToolUse` (Write\|Edit\|Bash) | red |
 | `PostToolUse` | yellow |
-| `Stop` | green |
-| `SessionEnd` | green |
+| `Stop` | green (blinking) | Turn finished — waiting for your reply |
+| `SessionEnd` | green | Session closed |

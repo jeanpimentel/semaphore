@@ -9,7 +9,7 @@ Config: `~/.cursor/hooks.json` (or project `.cursor/hooks.json`)
 | `preToolUse` (Write\|Edit\|Shell) | red | Tool about to run |
 | `afterFileEdit` | red | File was edited |
 | `postToolUse` (Write\|Edit) | yellow | Back to thinking |
-| `stop` | green | Turn finished |
+| `stop` | green (blinking) | Turn finished — waiting for your reply |
 | `sessionEnd` | green | Session closed |
 
 Docs: https://cursor.com/docs/hooks
