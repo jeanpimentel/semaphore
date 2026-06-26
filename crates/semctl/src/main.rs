@@ -63,6 +63,8 @@ enum Commands {
     },
     /// Diagnose installation
     Doctor,
+    /// Launch the Semaphore desktop app if not already running
+    Launch,
 }
 
 #[tokio::main]
@@ -123,6 +125,9 @@ async fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
         }
         Commands::Doctor => {
             doctor::run()?;
+        }
+        Commands::Launch => {
+            semctl::launch::launch_app()?;
         }
     }
     Ok(())

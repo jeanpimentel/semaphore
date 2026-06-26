@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use sem_core::config::Config;
 
 const MARKER: &str = "_semaphore";
+const MARKER_LAUNCH: &str = "_semaphore_launch";
 
 const ALL_TOOLS: &[&str] = &[
     "cursor",
@@ -26,6 +27,8 @@ pub fn run_install(all: bool, tool: Option<&str>) -> Result<(), Box<dyn std::err
         install_tool(tool)?;
         println!("installed hooks for {tool}");
     }
+
+    sync_launch_hooks()?;
     Ok(())
 }
 
@@ -144,6 +147,37 @@ fn hook_command(state: &str, reason: &str) -> String {
         "sem-hook"
     });
     format!("{} {} {}", hook.display(), state, reason)
+}
+
+fn launch_hook_command() -> String {
+    let semctl = Config::bin_dir().join(if cfg!(windows) {
+        "semctl.exe"
+    } else {
+        "semctl"
+    });
+    format!("{} launch", semctl.display())
+}
+
+/// Add or remove session-start hooks that launch Semaphore when connected AI tools start.
+pub fn sync_launch_hooks() -> Result<(), Box<dyn std::error::Error>> {
+    let config = Config::load();
+    ensure_binaries()?;
+
+    for tool in ALL_TOOLS {
+        let connected = crate::detect::hook_file_contains(&crate::detect::tool_config_path(
+            &home_dir(),
+            tool,
+        ));
+        if !connected {
+            continue;
+        }
+        if config.launch_with_tools {
+            install_launch_hook(tool)?;
+        } else {
+            remove_launch_hook(tool)?;
+        }
+    }
+    Ok(())
 }
 
 fn install_cursor() -> Result<(), Box<dyn std::error::Error>> {
@@ -514,6 +548,195 @@ fn remove_marked_hooks(path: &Path, key: &str) -> Result<(), Box<dyn std::error:
             for entry in arr.iter_mut() {
                 if let Some(inner) = entry.get_mut("hooks").and_then(|v| v.as_array_mut()) {
                     inner.retain(|h| h.get(MARKER) != Some(&serde_json::Value::Bool(true)));
+                }
+            }
+            if arr.is_empty() {
+                hooks.remove(&event);
+            }
+        }
+    }
+
+    fs::write(path, serde_json::to_string_pretty(&root)?)?;
+    Ok(())
+}
+
+fn install_launch_hook(tool: &str) -> Result<(), Box<dyn std::error::Error>> {
+    match tool {
+        "cursor" => merge_cursor_launch_hook(),
+        "claude-code" => merge_claude_launch_hook(),
+        "codex" => merge_codex_launch_hook(),
+        "gemini-cli" => merge_gemini_launch_hook(),
+        "copilot-cli" => merge_copilot_launch_hook(),
+        _ => Ok(()),
+    }
+}
+
+fn remove_launch_hook(tool: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let path = match tool {
+        "cursor" => home_dir().join(".cursor/hooks.json"),
+        "claude-code" => home_dir().join(".claude/settings.json"),
+        "codex" => home_dir().join(".codex/hooks.json"),
+        "gemini-cli" => home_dir().join(".gemini/settings.json"),
+        "copilot-cli" => home_dir().join(".copilot/hooks.json"),
+        _ => return Ok(()),
+    };
+    remove_marked_launch_hooks(&path, "hooks")
+}
+
+fn merge_cursor_launch_hook() -> Result<(), Box<dyn std::error::Error>> {
+    let path = home_dir().join(".cursor/hooks.json");
+    if !path.exists() {
+        return Ok(());
+    }
+    let mut root: serde_json::Value = serde_json::from_str(&fs::read_to_string(&path)?)?;
+    let hooks = root
+        .as_object_mut()
+        .and_then(|o| o.get_mut("hooks"))
+        .and_then(|v| v.as_object_mut())
+        .ok_or("invalid cursor hooks.json structure")?;
+    insert_launch_hook(hooks, "sessionStart");
+    fs::write(path, serde_json::to_string_pretty(&root)?)?;
+    Ok(())
+}
+
+fn merge_claude_launch_hook() -> Result<(), Box<dyn std::error::Error>> {
+    let path = home_dir().join(".claude/settings.json");
+    if !path.exists() {
+        return Ok(());
+    }
+    let mut root: serde_json::Value = serde_json::from_str(&fs::read_to_string(&path)?)?;
+    let hooks = root
+        .as_object_mut()
+        .and_then(|o| o.get_mut("hooks"))
+        .and_then(|v| v.as_object_mut())
+        .ok_or("invalid claude settings.json structure")?;
+    insert_claude_launch_hook(hooks, "SessionStart");
+    fs::write(path, serde_json::to_string_pretty(&root)?)?;
+    Ok(())
+}
+
+fn merge_codex_launch_hook() -> Result<(), Box<dyn std::error::Error>> {
+    let path = home_dir().join(".codex/hooks.json");
+    if !path.exists() {
+        return Ok(());
+    }
+    let mut root: serde_json::Value = serde_json::from_str(&fs::read_to_string(&path)?)?;
+    let hooks = root
+        .as_object_mut()
+        .and_then(|o| o.get_mut("hooks"))
+        .and_then(|v| v.as_object_mut())
+        .ok_or("invalid codex hooks.json structure")?;
+    insert_claude_launch_hook(hooks, "SessionStart");
+    fs::write(path, serde_json::to_string_pretty(&root)?)?;
+    Ok(())
+}
+
+fn merge_gemini_launch_hook() -> Result<(), Box<dyn std::error::Error>> {
+    let path = home_dir().join(".gemini/settings.json");
+    if !path.exists() {
+        return Ok(());
+    }
+    let mut root: serde_json::Value = serde_json::from_str(&fs::read_to_string(&path)?)?;
+    let hooks = root
+        .as_object_mut()
+        .and_then(|o| o.get_mut("hooks"))
+        .and_then(|v| v.as_object_mut())
+        .ok_or("invalid gemini settings.json structure")?;
+    insert_claude_launch_hook(hooks, "SessionStart");
+    fs::write(path, serde_json::to_string_pretty(&root)?)?;
+    Ok(())
+}
+
+fn merge_copilot_launch_hook() -> Result<(), Box<dyn std::error::Error>> {
+    let path = home_dir().join(".copilot/hooks.json");
+    if !path.exists() {
+        return Ok(());
+    }
+    let mut root: serde_json::Value = serde_json::from_str(&fs::read_to_string(&path)?)?;
+    let hooks = root
+        .as_object_mut()
+        .and_then(|o| o.get_mut("hooks"))
+        .and_then(|v| v.as_object_mut())
+        .ok_or("invalid copilot hooks.json structure")?;
+    insert_claude_launch_hook(hooks, "SessionStart");
+    fs::write(path, serde_json::to_string_pretty(&root)?)?;
+    Ok(())
+}
+
+fn insert_launch_hook(hooks: &mut serde_json::Map<String, serde_json::Value>, event: &str) {
+    let entry = serde_json::json!({
+        "command": launch_hook_command(),
+        MARKER_LAUNCH: true
+    });
+    let list = hooks.entry(event.to_string()).or_insert_with(|| serde_json::json!([]));
+    if let Some(arr) = list.as_array_mut() {
+        if !arr.iter().any(|v| v.get(MARKER_LAUNCH) == Some(&serde_json::Value::Bool(true))) {
+            arr.push(entry);
+        }
+    }
+}
+
+fn insert_claude_launch_hook(hooks: &mut serde_json::Map<String, serde_json::Value>, event: &str) {
+    let hook_entry = serde_json::json!({
+        "type": "command",
+        "command": launch_hook_command(),
+        MARKER_LAUNCH: true
+    });
+    let event_list = hooks
+        .entry(event.to_string())
+        .or_insert_with(|| serde_json::json!([]));
+    if let Some(arr) = event_list.as_array_mut() {
+        let exists = arr.iter().any(|block| {
+            block.get(MARKER_LAUNCH) == Some(&serde_json::Value::Bool(true))
+                || block
+                    .get("hooks")
+                    .and_then(|h| h.as_array())
+                    .map(|hooks| {
+                        hooks.iter().any(|h| {
+                            h.get(MARKER_LAUNCH) == Some(&serde_json::Value::Bool(true))
+                        })
+                    })
+                    .unwrap_or(false)
+        });
+        if !exists {
+            arr.push(serde_json::json!({
+                "hooks": [hook_entry],
+                MARKER_LAUNCH: true
+            }));
+        }
+    }
+}
+
+fn remove_marked_launch_hooks(path: &Path, key: &str) -> Result<(), Box<dyn std::error::Error>> {
+    if !path.exists() {
+        return Ok(());
+    }
+    let mut root: serde_json::Value = serde_json::from_str(&fs::read_to_string(path)?)?;
+    let Some(hooks) = root.get_mut(key).and_then(|v| v.as_object_mut()) else {
+        return Ok(());
+    };
+
+    let events: Vec<String> = hooks.keys().cloned().collect();
+    for event in events {
+        let Some(value) = hooks.get_mut(&event) else {
+            continue;
+        };
+        if let Some(arr) = value.as_array_mut() {
+            arr.retain(|entry| entry.get(MARKER_LAUNCH) != Some(&serde_json::Value::Bool(true)));
+            arr.retain(|entry| {
+                !entry
+                    .get("hooks")
+                    .and_then(|h| h.as_array())
+                    .map(|hooks| {
+                        hooks.iter().any(|h| {
+                            h.get(MARKER_LAUNCH) == Some(&serde_json::Value::Bool(true))
+                        })
+                    })
+                    .unwrap_or(false)
+            });
+            for entry in arr.iter_mut() {
+                if let Some(inner) = entry.get_mut("hooks").and_then(|v| v.as_array_mut()) {
+                    inner.retain(|h| h.get(MARKER_LAUNCH) != Some(&serde_json::Value::Bool(true)));
                 }
             }
             if arr.is_empty() {
