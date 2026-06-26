@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Welcome to Semaphore</title>
+    <link rel="stylesheet" href="/src/onboarding.css" />
+  </head>
+  <body>
+    <div class="onboarding-page">
+      <h1 id="onboarding-title">Welcome to Semaphore</h1>
+
+      <section id="step-welcome" class="step active">
+        <h2 id="welcome-title"></h2>
+        <p id="welcome-body" class="body-text"></p>
+        <h3 id="lights-title"></h3>
+        <ul id="lights-list" class="lights-list"></ul>
+      </section>
+
+      <section id="step-tools" class="step">
+        <h2 id="tools-title"></h2>
+        <p id="tools-body" class="body-text"></p>
+        <div id="tools-list" class="tools-list"></div>
+        <p id="tools-empty" class="note" hidden></p>
+        <button type="button" id="btn-connect-selected" class="secondary-btn" hidden>
+          Connect selected
+        </button>
+      </section>
+
+      <section id="step-done" class="step">
+        <h2 id="done-title"></h2>
+        <p id="done-body" class="body-text"></p>
+      </section>
+
+      <div class="actions">
+        <button type="button" id="btn-skip" class="ghost-btn">Skip</button>
+        <div class="actions-right">
+          <button type="button" id="btn-back" class="secondary-btn" hidden>Back</button>
+          <button type="button" id="btn-next" class="primary-btn">Next</button>
+        </div>
+      </div>
+    </div>
+    <script type="module" src="/src/onboarding.ts"></script>
+  </body>
+</html>
