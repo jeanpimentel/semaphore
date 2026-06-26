@@ -40,6 +40,8 @@ pub struct Config {
     pub window: WindowConfig,
     #[serde(default)]
     pub sounds: SoundsConfig,
+    #[serde(default)]
+    pub onboarding_completed: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -48,11 +50,30 @@ pub struct WindowConfig {
     pub x: i32,
     #[serde(default = "default_pos")]
     pub y: i32,
+    #[serde(default = "default_window_size")]
+    pub size: String,
 }
 
 impl Default for WindowConfig {
     fn default() -> Self {
-        Self { x: 20, y: 20 }
+        Self {
+            x: 20,
+            y: 20,
+            size: default_window_size(),
+        }
+    }
+}
+
+fn default_window_size() -> String {
+    "medium".to_string()
+}
+
+/// Physical pixel dimensions for the main widget window.
+pub fn window_dimensions(size: &str) -> (u32, u32) {
+    match size {
+        "small" => (54, 150),
+        "large" => (108, 300),
+        _ => (72, 200),
     }
 }
 
@@ -123,6 +144,7 @@ impl Default for Config {
             locale: detect_locale(),
             window: WindowConfig::default(),
             sounds: SoundsConfig::default(),
+            onboarding_completed: false,
         }
     }
 }
@@ -183,4 +205,37 @@ fn dirs_home() -> PathBuf {
         return PathBuf::from(profile);
     }
     PathBuf::from(".")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn default_window_size_is_medium() {
+        let config = Config::default();
+        assert_eq!(config.window.size, "medium");
+    }
+
+    #[test]
+    fn default_onboarding_not_completed() {
+        let config = Config::default();
+        assert!(!config.onboarding_completed);
+    }
+
+    #[test]
+    fn window_dimensions_for_each_size() {
+        assert_eq!(window_dimensions("small"), (54, 150));
+        assert_eq!(window_dimensions("medium"), (72, 200));
+        assert_eq!(window_dimensions("large"), (108, 300));
+        assert_eq!(window_dimensions("unknown"), (72, 200));
+    }
+
+    #[test]
+    fn deserializes_new_fields_with_defaults() {
+        let raw = r#"{"theme":"classic"}"#;
+        let config: Config = serde_json::from_str(raw).unwrap();
+        assert_eq!(config.window.size, "medium");
+        assert!(!config.onboarding_completed);
+    }
 }
