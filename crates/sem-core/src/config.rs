@@ -3,6 +3,26 @@ use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StageSound {
+    #[serde(default = "default_sound_preset")]
+    pub preset: String,
+    #[serde(default)]
+    pub custom_path: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SoundsConfig {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default = "default_green_sound")]
+    pub green: StageSound,
+    #[serde(default = "default_yellow_sound")]
+    pub yellow: StageSound,
+    #[serde(default = "default_red_sound")]
+    pub red: StageSound,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
     #[serde(default = "default_idle_timeout")]
     pub idle_timeout_secs: u64,
@@ -18,6 +38,8 @@ pub struct Config {
     pub stealth_acknowledged: bool,
     #[serde(default)]
     pub window: WindowConfig,
+    #[serde(default)]
+    pub sounds: SoundsConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -54,6 +76,42 @@ fn default_pos() -> i32 {
     20
 }
 
+fn default_sound_preset() -> String {
+    "soft-chime".to_string()
+}
+
+fn default_green_sound() -> StageSound {
+    StageSound {
+        preset: "soft-chime".to_string(),
+        custom_path: None,
+    }
+}
+
+fn default_yellow_sound() -> StageSound {
+    StageSound {
+        preset: "double-ping".to_string(),
+        custom_path: None,
+    }
+}
+
+fn default_red_sound() -> StageSound {
+    StageSound {
+        preset: "alert".to_string(),
+        custom_path: None,
+    }
+}
+
+impl Default for SoundsConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            green: default_green_sound(),
+            yellow: default_yellow_sound(),
+            red: default_red_sound(),
+        }
+    }
+}
+
 impl Default for Config {
     fn default() -> Self {
         Self {
@@ -64,6 +122,7 @@ impl Default for Config {
             theme: default_theme(),
             locale: detect_locale(),
             window: WindowConfig::default(),
+            sounds: SoundsConfig::default(),
         }
     }
 }
@@ -89,6 +148,10 @@ impl Config {
 
     pub fn bin_dir() -> PathBuf {
         Self::config_dir().join("bin")
+    }
+
+    pub fn sounds_dir() -> PathBuf {
+        Self::config_dir().join("sounds")
     }
 
     pub fn load() -> Self {
