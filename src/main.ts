@@ -9,10 +9,13 @@ import {
   shouldOpenSettingsOnDoubleClick,
 } from "./interaction";
 import { applyWindowSize, applyWindowOrientation } from "./window-size";
+import { runGeniusGame } from "./genius";
 import type { Config, Light } from "./types";
 
 let currentLight: Light = "green";
 let currentConfig: Config | null = null;
+let gamingMode = false;
+let geniusRunning = false;
 
 let dragStartX = 0;
 let dragStartY = 0;
@@ -53,6 +56,10 @@ async function loadConfig(): Promise<Config> {
 }
 
 function handleStateChange(state: Light): void {
+  if (gamingMode) {
+    return;
+  }
+
   if (state === currentLight) {
     return;
   }
@@ -122,6 +129,28 @@ window.addEventListener("DOMContentLoaded", async () => {
 
   await listen("test-lights-start", () => {
     playTestLightsMelody();
+  });
+
+  await listen<{ state: Light }>("genius-game-start", async () => {
+    if (geniusRunning) {
+      return;
+    }
+
+    geniusRunning = true;
+    gamingMode = true;
+    const locale = (currentConfig?.locale as Locale) || "en";
+    const strings = t(locale);
+
+    try {
+      await runGeniusGame(strings.main.dragHint, {
+        round: strings.main.geniusRound,
+        nice: strings.main.geniusNice,
+        gameOver: strings.main.geniusGameOver,
+      });
+    } finally {
+      gamingMode = false;
+      geniusRunning = false;
+    }
   });
 
   await listen<Config>("config-changed", async (event) => {

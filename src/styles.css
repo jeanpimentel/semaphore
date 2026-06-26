@@ -232,3 +232,16 @@ body[data-orientation="horizontal"] .housing {
     opacity: 0.9;
   }
 }
+
+.housing.gaming {
+  cursor: default;
+}
+
+.housing.gaming .light {
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.housing.gaming .light.active {
+  animation: none;
+}
