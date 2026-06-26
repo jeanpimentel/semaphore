@@ -5,6 +5,10 @@ export interface LocaleStrings {
     title: string;
     theme: string;
     language: string;
+    size: string;
+    sizeSmall: string;
+    sizeMedium: string;
+    sizeLarge: string;
     stealth: string;
     connect: string;
     cancel: string;
@@ -34,6 +38,9 @@ export interface LocaleStrings {
     all: string;
     connected: string;
     failed: string;
+    installed: string;
+    notInstalled: string;
+    notConnected: string;
   };
   main: {
     dragHint: string;
@@ -48,6 +55,23 @@ export interface LocaleStrings {
     trayTitle: string;
     trayMenu: string[];
   };
+  onboarding: {
+    title: string;
+    welcomeTitle: string;
+    welcomeBody: string;
+    lightsTitle: string;
+    toolsTitle: string;
+    toolsBody: string;
+    toolsEmpty: string;
+    connectSelected: string;
+    doneTitle: string;
+    doneBody: string;
+    next: string;
+    back: string;
+    skip: string;
+    finish: string;
+    connecting: string;
+  };
 }
 
 export const locales: Record<Locale, LocaleStrings> = {
@@ -56,6 +80,10 @@ export const locales: Record<Locale, LocaleStrings> = {
       title: "Settings",
       theme: "Theme",
       language: "Language",
+      size: "Size",
+      sizeSmall: "Small",
+      sizeMedium: "Medium",
+      sizeLarge: "Large",
       stealth: "Stealth mode (hide from screen share)",
       connect: "Connect tools",
       cancel: "Cancel",
@@ -84,12 +112,15 @@ export const locales: Record<Locale, LocaleStrings> = {
       gemini: "Gemini CLI",
       copilot: "Copilot CLI",
       all: "Connect all",
-      connected: "Hooks installed",
+      connected: "Connected",
       failed: "Install failed",
+      installed: "Installed",
+      notInstalled: "Not found",
+      notConnected: "Not connected",
     },
     main: {
-      dragHint: "Click and drag here to move",
-      settingsHint: "Settings",
+      dragHint: "Drag to move · Double-click for settings",
+      settingsHint: "Double-click to open settings",
     },
     about: {
       title: "About Semaphore",
@@ -103,7 +134,7 @@ export const locales: Record<Locale, LocaleStrings> = {
       controlsTitle: "Controls",
       controls: [
         "Drag the traffic light body to move the widget",
-        "Hover the widget and click ⚙ to open Settings",
+        "Double-click the traffic light to open Settings",
         "Left-click the tray icon to show the widget",
       ],
       trayTitle: "Tray menu (right-click tray icon)",
@@ -116,12 +147,35 @@ export const locales: Record<Locale, LocaleStrings> = {
         "Quit — exit Semaphore",
       ],
     },
+    onboarding: {
+      title: "Welcome to Semaphore",
+      welcomeTitle: "Your AI agent traffic light",
+      welcomeBody:
+        "Semaphore floats on your desktop and shows what your AI coding tools are doing — without switching windows.",
+      lightsTitle: "The three lights",
+      toolsTitle: "Connect your tools",
+      toolsBody: "We found these AI tools on your system. Select the ones you want to connect:",
+      toolsEmpty: "No AI tools detected. You can connect them later in Settings.",
+      connectSelected: "Connect selected",
+      doneTitle: "You're all set!",
+      doneBody:
+        "Drag the semaphore to move it. Double-click to open settings. Use the tray icon for quick access.",
+      next: "Next",
+      back: "Back",
+      skip: "Skip",
+      finish: "Get started",
+      connecting: "Connecting…",
+    },
   },
   "pt-BR": {
     settings: {
       title: "Configurações",
       theme: "Tema",
       language: "Idioma",
+      size: "Tamanho",
+      sizeSmall: "Pequeno",
+      sizeMedium: "Médio",
+      sizeLarge: "Grande",
       stealth: "Modo stealth (ocultar no compartilhamento de tela)",
       connect: "Conectar ferramentas",
       cancel: "Cancelar",
@@ -150,12 +204,15 @@ export const locales: Record<Locale, LocaleStrings> = {
       gemini: "Gemini CLI",
       copilot: "Copilot CLI",
       all: "Conectar todas",
-      connected: "Hooks instalados",
+      connected: "Conectado",
       failed: "Falha na instalação",
+      installed: "Instalado",
+      notInstalled: "Não encontrado",
+      notConnected: "Não conectado",
     },
     main: {
-      dragHint: "Clique e arraste aqui para mover",
-      settingsHint: "Configurações",
+      dragHint: "Arraste para mover · Duplo clique para configs",
+      settingsHint: "Duplo clique para abrir configurações",
     },
     about: {
       title: "Sobre o Semaphore",
@@ -169,7 +226,7 @@ export const locales: Record<Locale, LocaleStrings> = {
       controlsTitle: "Controles",
       controls: [
         "Arraste o corpo do semáforo para mover o widget",
-        "Passe o mouse e clique em ⚙ para abrir Configurações",
+        "Duplo clique no semáforo para abrir Configurações",
         "Clique esquerdo no ícone da bandeja para mostrar o widget",
       ],
       trayTitle: "Menu da bandeja (clique direito no ícone)",
@@ -181,6 +238,25 @@ export const locales: Record<Locale, LocaleStrings> = {
         "Always on Top — mantém o widget acima das outras janelas",
         "Quit — encerra o Semaphore",
       ],
+    },
+    onboarding: {
+      title: "Bem-vindo ao Semaphore",
+      welcomeTitle: "Seu semáforo de agentes de IA",
+      welcomeBody:
+        "O Semaphore fica flutuando na sua área de trabalho e mostra o que suas ferramentas de IA estão fazendo — sem trocar de janela.",
+      lightsTitle: "As três luzes",
+      toolsTitle: "Conecte suas ferramentas",
+      toolsBody: "Encontramos estas ferramentas de IA no seu sistema. Selecione as que deseja conectar:",
+      toolsEmpty: "Nenhuma ferramenta de IA detectada. Você pode conectar depois em Configurações.",
+      connectSelected: "Conectar selecionadas",
+      doneTitle: "Tudo pronto!",
+      doneBody:
+        "Arraste o semáforo para mover. Duplo clique para abrir configurações. Use o ícone da bandeja para acesso rápido.",
+      next: "Próximo",
+      back: "Voltar",
+      skip: "Pular",
+      finish: "Começar",
+      connecting: "Conectando…",
     },
   },
 };

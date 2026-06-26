@@ -74,6 +74,49 @@ label {
   gap: 8px;
 }
 
+.tool-status-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.tool-status-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  padding: 6px 8px;
+  background: #1a1a1a;
+  border-radius: 6px;
+  border: 1px solid #2a2a2a;
+}
+
+.tool-status-name {
+  color: #ddd;
+}
+
+.tool-status-badge {
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.tool-status-badge.connected {
+  background: rgba(61, 220, 103, 0.15);
+  color: #3ddc67;
+}
+
+.tool-status-badge.installed {
+  background: rgba(255, 211, 77, 0.12);
+  color: #ffd34d;
+}
+
+.tool-status-badge.missing {
+  background: rgba(255, 255, 255, 0.06);
+  color: #888;
+}
+
 button {
   border: 1px solid #444;
   background: #222;

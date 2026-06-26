@@ -5,7 +5,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { applyTheme } from "./themes";
 import { t, type Locale } from "./i18n";
 import { previewStageSound } from "./sounds";
-import type { Config, Light, StageSound } from "./types";
+import type { Config, Light, StageSound, ToolStatus } from "./types";
 
 const STAGES: Light[] = ["green", "yellow", "red"];
 
@@ -52,12 +52,57 @@ function updateStageUi(stage: Light): void {
   }
 }
 
+function toolStatusLabel(tool: ToolStatus, strings: ReturnType<typeof t>): string {
+  if (tool.connected) return strings.tools.connected;
+  if (tool.installed) return strings.tools.notConnected;
+  return strings.tools.notInstalled;
+}
+
+function toolStatusClass(tool: ToolStatus): string {
+  if (tool.connected) return "connected";
+  if (tool.installed) return "installed";
+  return "missing";
+}
+
+async function refreshToolStatus(): Promise<void> {
+  const list = document.getElementById("tool-status-list");
+  if (!list) return;
+
+  const strings = t(currentLocale);
+  let tools: ToolStatus[] = [];
+  try {
+    tools = await invoke<ToolStatus[]>("detect_tools");
+  } catch {
+    list.innerHTML = "";
+    return;
+  }
+
+  list.innerHTML = "";
+  for (const tool of tools) {
+    const row = document.createElement("div");
+    row.className = "tool-status-row";
+
+    const name = document.createElement("span");
+    name.className = "tool-status-name";
+    name.textContent = tool.name;
+
+    const badge = document.createElement("span");
+    badge.className = `tool-status-badge ${toolStatusClass(tool)}`;
+    badge.textContent = toolStatusLabel(tool, strings);
+
+    row.appendChild(name);
+    row.appendChild(badge);
+    list.appendChild(row);
+  }
+}
+
 function applyLocale(locale: Locale): void {
   currentLocale = locale;
   const strings = t(locale);
   document.getElementById("settings-title")!.textContent = strings.settings.title;
   document.getElementById("label-theme")!.textContent = strings.settings.theme;
   document.getElementById("label-language")!.textContent = strings.settings.language;
+  document.getElementById("label-size")!.textContent = strings.settings.size;
   document.getElementById("label-stealth")!.textContent = strings.settings.stealth;
   document.getElementById("label-connect")!.textContent = strings.settings.connect;
   document.getElementById("btn-cancel")!.textContent = strings.settings.cancel;
@@ -79,6 +124,13 @@ function applyLocale(locale: Locale): void {
   document.getElementById("about-description")!.textContent = strings.about.description;
   document.getElementById("about-controls-title")!.textContent = strings.about.controlsTitle;
   document.getElementById("about-tray-title")!.textContent = strings.about.trayTitle;
+
+  const sizeSelect = document.getElementById("size-select") as HTMLSelectElement;
+  for (const option of sizeSelect.options) {
+    if (option.value === "small") option.textContent = strings.settings.sizeSmall;
+    if (option.value === "medium") option.textContent = strings.settings.sizeMedium;
+    if (option.value === "large") option.textContent = strings.settings.sizeLarge;
+  }
 
   for (const stage of STAGES) {
     const browseBtn = document.getElementById(`sound-${stage}-browse`) as HTMLButtonElement;
@@ -115,6 +167,8 @@ function applyLocale(locale: Locale): void {
     li.textContent = item;
     trayList.appendChild(li);
   }
+
+  void refreshToolStatus();
 }
 
 function populateStageSound(stage: Light, sound: StageSound): void {
@@ -135,6 +189,8 @@ async function loadConfig(): Promise<Config> {
   applyLocale((config.locale as Locale) || "en");
   (document.getElementById("theme-select") as HTMLSelectElement).value = config.theme;
   (document.getElementById("locale-select") as HTMLSelectElement).value = config.locale;
+  (document.getElementById("size-select") as HTMLSelectElement).value =
+    config.window.size || "medium";
   (document.getElementById("stealth-checkbox") as HTMLInputElement).checked = config.stealth;
   (document.getElementById("sounds-enabled-checkbox") as HTMLInputElement).checked =
     config.sounds?.enabled ?? false;
@@ -176,6 +232,7 @@ async function saveConfigFromForm(): Promise<void> {
   let config = await invoke<Config>("get_config");
   config.theme = (document.getElementById("theme-select") as HTMLSelectElement).value;
   config.locale = (document.getElementById("locale-select") as HTMLSelectElement).value;
+  config.window.size = (document.getElementById("size-select") as HTMLSelectElement).value;
   config.stealth = (document.getElementById("stealth-checkbox") as HTMLInputElement).checked;
   config.sounds = readSoundsFromForm();
   config = await maybeAcknowledgeStealth(config);
@@ -183,6 +240,7 @@ async function saveConfigFromForm(): Promise<void> {
   applyTheme(config.theme);
   applyLocale(config.locale as Locale);
   await invoke("set_stealth", { enabled: config.stealth });
+  await invoke("apply_window_size", { size: config.window.size });
   await emit("config-changed", config);
 }
 
@@ -226,6 +284,7 @@ async function connectTool(tool: string): Promise<void> {
   try {
     await invoke("install_hooks", { tool });
     alert(strings.tools.connected);
+    await refreshToolStatus();
   } catch {
     alert(strings.tools.failed);
   }
