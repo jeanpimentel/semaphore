@@ -85,6 +85,7 @@
                 <option value="bell">Bell</option>
                 <option value="ping">Ping</option>
                 <option value="pop">Pop</option>
+                <option value="attention-chime">Attention chime</option>
                 <option value="custom">Custom file…</option>
               </select>
               <button type="button" class="sound-browse-btn" id="sound-green-browse" hidden>Browse…</button>
@@ -104,6 +105,7 @@
                 <option value="bell">Bell</option>
                 <option value="ping">Ping</option>
                 <option value="pop">Pop</option>
+                <option value="attention-chime">Attention chime</option>
                 <option value="custom">Custom file…</option>
               </select>
               <button type="button" class="sound-browse-btn" id="sound-yellow-browse" hidden>Browse…</button>
@@ -123,12 +125,33 @@
                 <option value="bell">Bell</option>
                 <option value="ping">Ping</option>
                 <option value="pop">Pop</option>
+                <option value="attention-chime">Attention chime</option>
                 <option value="custom">Custom file…</option>
               </select>
               <button type="button" class="sound-browse-btn" id="sound-red-browse" hidden>Browse…</button>
               <button type="button" class="sound-preview-btn" id="sound-red-preview">Preview</button>
             </div>
             <span class="sound-custom-hint note" id="sound-red-hint" hidden></span>
+          </div>
+
+          <div class="sound-row" data-stage="awaiting_input">
+            <span class="sound-label" id="label-sound-awaiting-input">Awaiting input</span>
+            <div class="sound-controls">
+              <select class="sound-preset-select" id="sound-awaiting_input-preset">
+                <option value="soft-chime">Soft chime</option>
+                <option value="double-ping">Double ping</option>
+                <option value="alert">Alert</option>
+                <option value="chime">Chime</option>
+                <option value="bell">Bell</option>
+                <option value="ping">Ping</option>
+                <option value="pop">Pop</option>
+                <option value="attention-chime">Attention chime</option>
+                <option value="custom">Custom file…</option>
+              </select>
+              <button type="button" class="sound-browse-btn" id="sound-awaiting_input-browse" hidden>Browse…</button>
+              <button type="button" class="sound-preview-btn" id="sound-awaiting_input-preview">Preview</button>
+            </div>
+            <span class="sound-custom-hint note" id="sound-awaiting_input-hint" hidden></span>
           </div>
         </section>
 

@@ -14,20 +14,21 @@ import {
   updateLivePreview,
 } from "./preview";
 import { previewStageSound } from "./sounds";
-import type { Config, Light, StageSound, ToolStatus, WindowSize } from "./types";
+import type { Config, SoundStage, StageSound, ToolStatus, WindowSize } from "./types";
 
 const GITHUB_REPO = "https://github.com/lucianodiisouza/semaphore";
 
-const STAGES: Light[] = ["green", "yellow", "red"];
+const SOUND_STAGES: SoundStage[] = ["green", "yellow", "red", "awaiting_input"];
 
 let currentLocale: Locale = "en";
 let selectedTheme = "classic";
 let selectedSize = "medium";
 let appVersion = "0.2.1";
-const customPaths: Record<Light, string | null> = {
+const customPaths: Record<SoundStage, string | null> = {
   green: null,
   yellow: null,
   red: null,
+  awaiting_input: null,
 };
 
 function getThemeInput(): HTMLInputElement {
@@ -102,7 +103,7 @@ function initAppearancePickers(): void {
   updateLivePreview(livePreviewInner, selectedTheme, selectedSize);
 }
 
-function stageSound(stage: Light): StageSound {
+function stageSound(stage: SoundStage): StageSound {
   const presetSelect = document.getElementById(`sound-${stage}-preset`) as HTMLSelectElement;
   const isCustom = presetSelect.value === "custom";
   return {
@@ -113,7 +114,7 @@ function stageSound(stage: Light): StageSound {
 
 function validateSounds(): boolean {
   const strings = t(currentLocale);
-  for (const stage of STAGES) {
+  for (const stage of SOUND_STAGES) {
     const presetSelect = document.getElementById(`sound-${stage}-preset`) as HTMLSelectElement;
     if (presetSelect.value === "custom" && !customPaths[stage]) {
       alert(strings.settings.soundImportFailed);
@@ -123,7 +124,7 @@ function validateSounds(): boolean {
   return true;
 }
 
-function updateStageUi(stage: Light): void {
+function updateStageUi(stage: SoundStage): void {
   const presetSelect = document.getElementById(`sound-${stage}-preset`) as HTMLSelectElement;
   const browseBtn = document.getElementById(`sound-${stage}-browse`) as HTMLButtonElement;
   const hint = document.getElementById(`sound-${stage}-hint`) as HTMLSpanElement;
@@ -233,6 +234,8 @@ function applyLocale(locale: Locale): void {
   document.getElementById("label-sound-green")!.textContent = strings.settings.soundGreen;
   document.getElementById("label-sound-yellow")!.textContent = strings.settings.soundYellow;
   document.getElementById("label-sound-red")!.textContent = strings.settings.soundRed;
+  document.getElementById("label-sound-awaiting-input")!.textContent =
+    strings.settings.soundAwaitingInput;
   document.getElementById("connect-cursor")!.textContent = strings.tools.cursor;
   document.getElementById("connect-claude")!.textContent = strings.tools.claude;
   document.getElementById("connect-codex")!.textContent = strings.tools.codex;
@@ -258,7 +261,7 @@ function applyLocale(locale: Locale): void {
     if (size === "large") option.textContent = strings.settings.sizeLarge;
   }
 
-  for (const stage of STAGES) {
+  for (const stage of SOUND_STAGES) {
     const browseBtn = document.getElementById(`sound-${stage}-browse`) as HTMLButtonElement;
     const previewBtn = document.getElementById(`sound-${stage}-preview`) as HTMLButtonElement;
     const customOption = document.querySelector(
@@ -297,7 +300,7 @@ function applyLocale(locale: Locale): void {
   void refreshToolStatus();
 }
 
-function populateStageSound(stage: Light, sound: StageSound): void {
+function populateStageSound(stage: SoundStage, sound: StageSound): void {
   const presetSelect = document.getElementById(`sound-${stage}-preset`) as HTMLSelectElement;
   if (sound.custom_path) {
     customPaths[stage] = sound.custom_path;
@@ -327,6 +330,10 @@ async function loadConfig(): Promise<Config> {
   populateStageSound("green", config.sounds?.green ?? { preset: "soft-chime", custom_path: null });
   populateStageSound("yellow", config.sounds?.yellow ?? { preset: "double-ping", custom_path: null });
   populateStageSound("red", config.sounds?.red ?? { preset: "alert", custom_path: null });
+  populateStageSound(
+    "awaiting_input",
+    config.sounds?.awaiting_input ?? { preset: "attention-chime", custom_path: null },
+  );
 
   initAppearancePickers();
   return config;
@@ -354,6 +361,7 @@ function readSoundsFromForm(): Config["sounds"] {
     green: stageSound("green"),
     yellow: stageSound("yellow"),
     red: stageSound("red"),
+    awaiting_input: stageSound("awaiting_input"),
   };
 }
 
@@ -385,7 +393,7 @@ async function saveConfigFromForm(): Promise<void> {
   await emit("config-changed", config);
 }
 
-async function browseCustomSound(stage: Light): Promise<void> {
+async function browseCustomSound(stage: SoundStage): Promise<void> {
   const strings = t(currentLocale);
   const selected = await open({
     multiple: false,
@@ -471,7 +479,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     void hideSettings();
   });
 
-  for (const stage of STAGES) {
+  for (const stage of SOUND_STAGES) {
     document.getElementById(`sound-${stage}-preset`)?.addEventListener("change", () => {
       if ((document.getElementById(`sound-${stage}-preset`) as HTMLSelectElement).value !== "custom") {
         customPaths[stage] = null;

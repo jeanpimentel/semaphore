@@ -20,6 +20,7 @@ export interface LocaleStrings {
     soundGreen: string;
     soundYellow: string;
     soundRed: string;
+    soundAwaitingInput: string;
     soundPreset: string;
     soundCustom: string;
     soundBrowse: string;
@@ -115,6 +116,7 @@ export const locales: Record<Locale, LocaleStrings> = {
       soundGreen: "Green (ready)",
       soundYellow: "Yellow (thinking)",
       soundRed: "Red (writing)",
+      soundAwaitingInput: "Awaiting input (all lights blink)",
       soundPreset: "Sound",
       soundCustom: "Custom file…",
       soundBrowse: "Browse…",
@@ -232,6 +234,7 @@ export const locales: Record<Locale, LocaleStrings> = {
       soundGreen: "Verde (pronto)",
       soundYellow: "Amarelo (pensando)",
       soundRed: "Vermelho (escrevendo)",
+      soundAwaitingInput: "Aguardando input (três luzes piscando)",
       soundPreset: "Som",
       soundCustom: "Arquivo personalizado…",
       soundBrowse: "Procurar…",
