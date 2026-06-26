@@ -54,6 +54,51 @@ fn show_settings(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+const MAX_SOUND_BYTES: u64 = 512 * 1024;
+
+const ALLOWED_SOUND_EXTENSIONS: &[&str] = &["mp3", "wav", "ogg", "m4a", "aac", "webm"];
+
+#[tauri::command]
+fn import_stage_sound(stage: String, source_path: String) -> Result<String, String> {
+    let stage = stage.as_str();
+    if !matches!(stage, "green" | "yellow" | "red") {
+        return Err("invalid stage".to_string());
+    }
+
+    let source = std::path::Path::new(&source_path);
+    if !source.is_file() {
+        return Err("file not found".to_string());
+    }
+
+    let ext = source
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| e.to_lowercase())
+        .ok_or_else(|| "missing file extension".to_string())?;
+
+    if !ALLOWED_SOUND_EXTENSIONS.contains(&ext.as_str()) {
+        return Err("unsupported audio format".to_string());
+    }
+
+    let metadata = std::fs::metadata(source).map_err(|e| e.to_string())?;
+    if metadata.len() > MAX_SOUND_BYTES {
+        return Err(format!(
+            "file too large (max {} KB)",
+            MAX_SOUND_BYTES / 1024
+        ));
+    }
+
+    let dest_dir = Config::sounds_dir();
+    std::fs::create_dir_all(&dest_dir).map_err(|e| e.to_string())?;
+
+    let dest = dest_dir.join(format!("{stage}.{ext}"));
+    std::fs::copy(source, &dest).map_err(|e| e.to_string())?;
+
+    dest.to_str()
+        .map(|s| s.to_string())
+        .ok_or_else(|| "invalid destination path".to_string())
+}
+
 fn emit_state(app: &AppHandle, state: LightState) {
     let payload = StatePayload {
         state: match state {
@@ -186,6 +231,7 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
             focus_main_window(app);
         }))
@@ -211,7 +257,8 @@ pub fn run() {
             save_config,
             set_stealth,
             install_hooks,
-            show_settings
+            show_settings,
+            import_stage_sound
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

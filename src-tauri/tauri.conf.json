@@ -29,7 +29,7 @@
         "title": "Semaphore Settings",
         "url": "settings.html",
         "width": 420,
-        "height": 640,
+        "height": 720,
         "resizable": false,
         "decorations": true,
         "visible": false,
@@ -38,7 +38,11 @@
       }
     ],
     "security": {
-      "csp": null
+      "csp": null,
+      "assetProtocol": {
+        "enable": true,
+        "scope": ["$HOME/.semaphore/sounds/**"]
+      }
     }
   },
   "bundle": {
