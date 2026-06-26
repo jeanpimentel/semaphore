@@ -6,6 +6,7 @@ use sem_core::ipc::{IpcServer, PruneTask};
 use sem_core::state::{LightState, StateMachine};
 use semctl::detect::{self, ToolStatus};
 use semctl::install;
+use tauri_plugin_autostart::MacosLauncher;
 use tauri::{
     menu::{CheckMenuItem, Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
@@ -26,6 +27,23 @@ fn get_config() -> Config {
 #[tauri::command]
 fn save_config(config: Config) -> Result<(), String> {
     config.save().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn set_autostart(app: AppHandle, enabled: bool) -> Result<(), String> {
+    use tauri_plugin_autostart::ManagerExt;
+    let autostart = app.autolaunch();
+    if enabled {
+        autostart.enable().map_err(|e| e.to_string())?;
+    } else {
+        autostart.disable().map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn sync_launch_hooks() -> Result<(), String> {
+    install::sync_launch_hooks().map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -334,6 +352,9 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_autostart::Builder::new()
+            .macos_launcher(MacosLauncher::LaunchAgent)
+            .build())
         .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
             focus_main_window(app);
         }))
@@ -350,6 +371,13 @@ pub fn run() {
             if let Some(window) = app.get_webview_window("main") {
                 setup_main_window(&window, &config)?;
             }
+
+            if config.autostart {
+                use tauri_plugin_autostart::ManagerExt;
+                let _ = app.handle().autolaunch().enable();
+            }
+
+            let _ = install::sync_launch_hooks();
 
             if show_onboarding_on_start {
                 let _ = show_onboarding(app.handle().clone());
@@ -368,7 +396,9 @@ pub fn run() {
             show_onboarding,
             restart_onboarding,
             apply_window_size,
-            import_stage_sound
+            import_stage_sound,
+            set_autostart,
+            sync_launch_hooks
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
