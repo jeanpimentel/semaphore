@@ -13,7 +13,10 @@ if (!host) {
 }
 
 const target = process.env.CARGO_BUILD_TARGET || host;
-const profile = process.env.PROFILE === "release" ? "release" : "debug";
+const profile =
+  process.argv.includes("--release") || process.env.PROFILE === "release"
+    ? "release"
+    : "debug";
 const releaseFlag = profile === "release" ? " --release" : "";
 const targetFlag = target !== host ? ` --target ${target}` : "";
 

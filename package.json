@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "dev:prepare": "node scripts/prepare-semctl.mjs",
-    "stage-semctl:release": "PROFILE=release node scripts/prepare-semctl.mjs",
+    "stage-semctl:release": "node scripts/prepare-semctl.mjs --release",
     "build": "tsc && vite build",
     "preview": "vite preview",
     "test": "vitest run",
