@@ -1,0 +1,131 @@
+import { convertFileSrc } from "@tauri-apps/api/core";
+import type { Light, StageSound } from "./types";
+
+const MAX_CUSTOM_DURATION_SECS = 3;
+
+let audioContext: AudioContext | null = null;
+
+function getAudioContext(): AudioContext {
+  if (!audioContext) {
+    audioContext = new AudioContext();
+  }
+  return audioContext;
+}
+
+function resumeContext(ctx: AudioContext): void {
+  if (ctx.state === "suspended") {
+    void ctx.resume();
+  }
+}
+
+function playTone(
+  ctx: AudioContext,
+  frequency: number,
+  start: number,
+  duration: number,
+  volume = 0.15,
+  type: OscillatorType = "sine",
+): void {
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = type;
+  osc.frequency.value = frequency;
+  gain.gain.setValueAtTime(0, start);
+  gain.gain.linearRampToValueAtTime(volume, start + 0.01);
+  gain.gain.exponentialRampToValueAtTime(0.001, start + duration);
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+  osc.start(start);
+  osc.stop(start + duration + 0.05);
+}
+
+function playPreset(preset: string): void {
+  const ctx = getAudioContext();
+  resumeContext(ctx);
+  const t0 = ctx.currentTime;
+
+  switch (preset) {
+    case "soft-chime":
+      playTone(ctx, 523.25, t0, 0.25, 0.12);
+      playTone(ctx, 659.25, t0 + 0.12, 0.3, 0.1);
+      break;
+    case "double-ping":
+      playTone(ctx, 880, t0, 0.08, 0.14);
+      playTone(ctx, 880, t0 + 0.14, 0.08, 0.12);
+      break;
+    case "alert":
+      playTone(ctx, 440, t0, 0.12, 0.1, "square");
+      playTone(ctx, 330, t0 + 0.1, 0.15, 0.08, "square");
+      break;
+    case "chime":
+      playTone(ctx, 523.25, t0, 0.2, 0.1);
+      playTone(ctx, 659.25, t0 + 0.08, 0.2, 0.09);
+      playTone(ctx, 783.99, t0 + 0.16, 0.25, 0.08);
+      break;
+    case "bell":
+      playTone(ctx, 880, t0, 0.35, 0.1);
+      playTone(ctx, 1320, t0, 0.3, 0.04);
+      break;
+    case "ping":
+      playTone(ctx, 1000, t0, 0.1, 0.14);
+      break;
+    case "pop":
+      playTone(ctx, 200, t0, 0.06, 0.18, "triangle");
+      break;
+    default:
+      playTone(ctx, 660, t0, 0.15, 0.12);
+  }
+}
+
+async function playCustomFile(path: string): Promise<void> {
+  const audio = new Audio(convertFileSrc(path));
+  audio.volume = 0.7;
+
+  await new Promise<void>((resolve, reject) => {
+    const cleanup = () => {
+      audio.removeEventListener("ended", onEnded);
+      audio.removeEventListener("error", onError);
+    };
+    const onEnded = () => {
+      cleanup();
+      resolve();
+    };
+    const onError = () => {
+      cleanup();
+      reject(new Error("failed to play audio"));
+    };
+
+    audio.addEventListener("ended", onEnded);
+    audio.addEventListener("error", onError);
+
+    audio.addEventListener(
+      "loadedmetadata",
+      () => {
+        if (audio.duration > MAX_CUSTOM_DURATION_SECS) {
+          cleanup();
+          audio.pause();
+          reject(new Error("audio too long"));
+        }
+      },
+      { once: true },
+    );
+
+    void audio.play().catch(reject);
+  });
+}
+
+export async function playStageSound(_stage: Light, sound: StageSound): Promise<void> {
+  if (sound.custom_path) {
+    try {
+      await playCustomFile(sound.custom_path);
+    } catch {
+      playPreset(sound.preset);
+    }
+    return;
+  }
+  playPreset(sound.preset);
+}
+
+export async function previewStageSound(stage: Light, sound: StageSound): Promise<void> {
+  await playStageSound(stage, sound);
+}
