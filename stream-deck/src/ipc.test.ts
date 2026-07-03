@@ -55,7 +55,10 @@ function createMockSocket(): MockSocket {
   };
 }
 
-function mockSuccessfulResponse(response: string): MockSocket {
+function mockSuccessfulResponse(response: string): {
+  socket: MockSocket;
+  promise: ReturnType<typeof queryState>;
+} {
   const socket = createMockSocket();
   createConnectionMock.mockReturnValue(socket);
 
