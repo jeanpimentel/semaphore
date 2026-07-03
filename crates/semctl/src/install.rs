@@ -29,7 +29,27 @@ pub fn run_install(all: bool, tool: Option<&str>) -> Result<(), Box<dyn std::err
     }
 
     sync_launch_hooks()?;
+    print_path_hint();
     Ok(())
+}
+
+/// Warn when ~/.semaphore/bin is not on PATH, since hooks and the docs
+/// assume `semctl` is invocable by name.
+fn print_path_hint() {
+    let bin_dir = Config::bin_dir();
+    let on_path = std::env::var("PATH")
+        .map(|path| std::env::split_paths(&path).any(|p| p == bin_dir))
+        .unwrap_or(false);
+    if !on_path {
+        println!();
+        println!("note: {} is not in your PATH.", bin_dir.display());
+        if cfg!(windows) {
+            println!("add it via System Properties > Environment Variables to run `semctl` by name.");
+        } else {
+            println!("add this line to your shell profile (e.g. ~/.zshrc or ~/.bashrc):");
+            println!("  export PATH=\"$HOME/.semaphore/bin:$PATH\"");
+        }
+    }
 }
 
 pub fn run_uninstall(all: bool, tool: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
@@ -261,19 +281,47 @@ fn enable_codex_hooks() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+/// Read a JSON config, treating a missing or blank file as `default`.
+fn load_json_or(
+    path: &Path,
+    default: serde_json::Value,
+) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
+    if !path.exists() {
+        return Ok(default);
+    }
+    let content = fs::read_to_string(path)?;
+    if content.trim().is_empty() {
+        return Ok(default);
+    }
+    serde_json::from_str(&content)
+        .map_err(|err| format!("failed to parse {}: {err}", path.display()).into())
+}
+
+/// Get the top-level "hooks" object, creating it when absent or null.
+/// Errors only when the file genuinely can't be merged into (root or
+/// "hooks" is some other non-object value).
+fn ensure_hooks_object<'a>(
+    root: &'a mut serde_json::Value,
+    label: &str,
+) -> Result<&'a mut serde_json::Map<String, serde_json::Value>, Box<dyn std::error::Error>> {
+    let obj = root
+        .as_object_mut()
+        .ok_or_else(|| format!("invalid {label} structure: root is not a JSON object"))?;
+    let hooks = obj
+        .entry("hooks".to_string())
+        .or_insert_with(|| serde_json::json!({}));
+    if hooks.is_null() {
+        *hooks = serde_json::json!({});
+    }
+    hooks
+        .as_object_mut()
+        .ok_or_else(|| format!("invalid {label} structure: \"hooks\" is not an object").into())
+}
+
 fn merge_cursor_hooks(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
     fs::create_dir_all(path.parent().unwrap())?;
-    let mut root: serde_json::Value = if path.exists() {
-        serde_json::from_str(&fs::read_to_string(path)?)?
-    } else {
-        serde_json::json!({ "version": 1, "hooks": {} })
-    };
-
-    let hooks = root
-        .as_object_mut()
-        .and_then(|o| o.get_mut("hooks"))
-        .and_then(|v| v.as_object_mut())
-        .ok_or("invalid cursor hooks.json structure")?;
+    let mut root = load_json_or(path, serde_json::json!({ "version": 1, "hooks": {} }))?;
+    let hooks = ensure_hooks_object(&mut root, "cursor hooks.json")?;
 
     insert_cursor_semctl_hook(hooks, "beforeSubmitPrompt", "cursor-prompt");
     insert_hook(hooks, "afterAgentThought", "yellow", "thinking", None);
@@ -305,16 +353,8 @@ fn merge_cursor_hooks(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
 
 fn merge_codex_hooks(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
     fs::create_dir_all(path.parent().unwrap())?;
-    let mut root: serde_json::Value = if path.exists() {
-        serde_json::from_str(&fs::read_to_string(path)?)?
-    } else {
-        serde_json::json!({ "hooks": {} })
-    };
-    let hooks = root
-        .as_object_mut()
-        .and_then(|o| o.get_mut("hooks"))
-        .and_then(|v| v.as_object_mut())
-        .ok_or("invalid codex hooks.json structure")?;
+    let mut root = load_json_or(path, serde_json::json!({ "hooks": {} }))?;
+    let hooks = ensure_hooks_object(&mut root, "codex hooks.json")?;
 
     insert_codex_hook(hooks, "UserPromptSubmit", "yellow", "thinking", "");
     insert_codex_hook(hooks, "PreToolUse", "red", "writing", "Bash");
@@ -327,16 +367,8 @@ fn merge_codex_hooks(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
 
 fn merge_gemini_hooks(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
     fs::create_dir_all(path.parent().unwrap())?;
-    let mut root: serde_json::Value = if path.exists() {
-        serde_json::from_str(&fs::read_to_string(path)?)?
-    } else {
-        serde_json::json!({ "hooks": {} })
-    };
-    let hooks = root
-        .as_object_mut()
-        .and_then(|o| o.get_mut("hooks"))
-        .and_then(|v| v.as_object_mut())
-        .ok_or("invalid gemini settings.json structure")?;
+    let mut root = load_json_or(path, serde_json::json!({ "hooks": {} }))?;
+    let hooks = ensure_hooks_object(&mut root, "gemini settings.json")?;
 
     insert_gemini_hook(hooks, "BeforeAgent", "yellow", "thinking", "");
     insert_gemini_hook(hooks, "BeforeModel", "yellow", "thinking", "");
@@ -351,16 +383,8 @@ fn merge_gemini_hooks(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
 
 fn merge_copilot_hooks(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
     fs::create_dir_all(path.parent().unwrap())?;
-    let mut root: serde_json::Value = if path.exists() {
-        serde_json::from_str(&fs::read_to_string(path)?)?
-    } else {
-        serde_json::json!({ "hooks": {} })
-    };
-    let hooks = root
-        .as_object_mut()
-        .and_then(|o| o.get_mut("hooks"))
-        .and_then(|v| v.as_object_mut())
-        .ok_or("invalid copilot hooks.json structure")?;
+    let mut root = load_json_or(path, serde_json::json!({ "hooks": {} }))?;
+    let hooks = ensure_hooks_object(&mut root, "copilot hooks.json")?;
 
     insert_codex_hook(hooks, "UserPromptSubmit", "yellow", "thinking", "");
     insert_codex_hook(hooks, "PreToolUse", "red", "writing", "Write|Edit|Bash");
@@ -425,17 +449,8 @@ fn push_gemini_block(
 
 fn merge_claude_hooks(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
     fs::create_dir_all(path.parent().unwrap())?;
-    let mut root: serde_json::Value = if path.exists() {
-        serde_json::from_str(&fs::read_to_string(path)?)?
-    } else {
-        serde_json::json!({ "hooks": {} })
-    };
-
-    let hooks = root
-        .as_object_mut()
-        .and_then(|o| o.get_mut("hooks"))
-        .and_then(|v| v.as_object_mut())
-        .ok_or("invalid claude settings.json structure")?;
+    let mut root = load_json_or(path, serde_json::json!({ "hooks": {} }))?;
+    let hooks = ensure_hooks_object(&mut root, "claude settings.json")?;
 
     insert_claude_hook(hooks, "UserPromptSubmit", "yellow", "thinking", "");
     insert_claude_hook(hooks, "PreToolUse", "red", "writing", "Write|Edit|Bash");
@@ -550,15 +565,14 @@ fn remove_marked_hooks(path: &Path, key: &str) -> Result<(), Box<dyn std::error:
     if !path.exists() {
         return Ok(());
     }
-    let mut root: serde_json::Value = serde_json::from_str(&fs::read_to_string(path)?)?;
+    let content = fs::read_to_string(path)?;
+    if content.trim().is_empty() {
+        return Ok(());
+    }
+    let mut root: serde_json::Value = serde_json::from_str(&content)?;
     let Some(hooks) = root.get_mut(key).and_then(|v| v.as_object_mut()) else {
         return Ok(());
     };
-
-    for (_event, value) in hooks.clone().iter() {
-        // handled per event below
-        let _ = value;
-    }
 
     let events: Vec<String> = hooks.keys().cloned().collect();
     for event in events {
@@ -619,12 +633,8 @@ fn merge_cursor_launch_hook() -> Result<(), Box<dyn std::error::Error>> {
     if !path.exists() {
         return Ok(());
     }
-    let mut root: serde_json::Value = serde_json::from_str(&fs::read_to_string(&path)?)?;
-    let hooks = root
-        .as_object_mut()
-        .and_then(|o| o.get_mut("hooks"))
-        .and_then(|v| v.as_object_mut())
-        .ok_or("invalid cursor hooks.json structure")?;
+    let mut root = load_json_or(&path, serde_json::json!({ "version": 1, "hooks": {} }))?;
+    let hooks = ensure_hooks_object(&mut root, "cursor hooks.json")?;
     insert_launch_hook(hooks, "sessionStart");
     fs::write(path, serde_json::to_string_pretty(&root)?)?;
     Ok(())
@@ -635,12 +645,8 @@ fn merge_claude_launch_hook() -> Result<(), Box<dyn std::error::Error>> {
     if !path.exists() {
         return Ok(());
     }
-    let mut root: serde_json::Value = serde_json::from_str(&fs::read_to_string(&path)?)?;
-    let hooks = root
-        .as_object_mut()
-        .and_then(|o| o.get_mut("hooks"))
-        .and_then(|v| v.as_object_mut())
-        .ok_or("invalid claude settings.json structure")?;
+    let mut root = load_json_or(&path, serde_json::json!({ "hooks": {} }))?;
+    let hooks = ensure_hooks_object(&mut root, "claude settings.json")?;
     insert_claude_launch_hook(hooks, "SessionStart");
     fs::write(path, serde_json::to_string_pretty(&root)?)?;
     Ok(())
@@ -651,12 +657,8 @@ fn merge_codex_launch_hook() -> Result<(), Box<dyn std::error::Error>> {
     if !path.exists() {
         return Ok(());
     }
-    let mut root: serde_json::Value = serde_json::from_str(&fs::read_to_string(&path)?)?;
-    let hooks = root
-        .as_object_mut()
-        .and_then(|o| o.get_mut("hooks"))
-        .and_then(|v| v.as_object_mut())
-        .ok_or("invalid codex hooks.json structure")?;
+    let mut root = load_json_or(&path, serde_json::json!({ "hooks": {} }))?;
+    let hooks = ensure_hooks_object(&mut root, "codex hooks.json")?;
     insert_claude_launch_hook(hooks, "SessionStart");
     fs::write(path, serde_json::to_string_pretty(&root)?)?;
     Ok(())
@@ -667,12 +669,8 @@ fn merge_gemini_launch_hook() -> Result<(), Box<dyn std::error::Error>> {
     if !path.exists() {
         return Ok(());
     }
-    let mut root: serde_json::Value = serde_json::from_str(&fs::read_to_string(&path)?)?;
-    let hooks = root
-        .as_object_mut()
-        .and_then(|o| o.get_mut("hooks"))
-        .and_then(|v| v.as_object_mut())
-        .ok_or("invalid gemini settings.json structure")?;
+    let mut root = load_json_or(&path, serde_json::json!({ "hooks": {} }))?;
+    let hooks = ensure_hooks_object(&mut root, "gemini settings.json")?;
     insert_claude_launch_hook(hooks, "SessionStart");
     fs::write(path, serde_json::to_string_pretty(&root)?)?;
     Ok(())
@@ -683,12 +681,8 @@ fn merge_copilot_launch_hook() -> Result<(), Box<dyn std::error::Error>> {
     if !path.exists() {
         return Ok(());
     }
-    let mut root: serde_json::Value = serde_json::from_str(&fs::read_to_string(&path)?)?;
-    let hooks = root
-        .as_object_mut()
-        .and_then(|o| o.get_mut("hooks"))
-        .and_then(|v| v.as_object_mut())
-        .ok_or("invalid copilot hooks.json structure")?;
+    let mut root = load_json_or(&path, serde_json::json!({ "hooks": {} }))?;
+    let hooks = ensure_hooks_object(&mut root, "copilot hooks.json")?;
     insert_claude_launch_hook(hooks, "SessionStart");
     fs::write(path, serde_json::to_string_pretty(&root)?)?;
     Ok(())
@@ -742,7 +736,11 @@ fn remove_marked_launch_hooks(path: &Path, key: &str) -> Result<(), Box<dyn std:
     if !path.exists() {
         return Ok(());
     }
-    let mut root: serde_json::Value = serde_json::from_str(&fs::read_to_string(path)?)?;
+    let content = fs::read_to_string(path)?;
+    if content.trim().is_empty() {
+        return Ok(());
+    }
+    let mut root: serde_json::Value = serde_json::from_str(&content)?;
     let Some(hooks) = root.get_mut(key).and_then(|v| v.as_object_mut()) else {
         return Ok(());
     };
@@ -842,5 +840,77 @@ mod tests {
         merge_cursor_hooks(&path).unwrap();
         let second = fs::read_to_string(&path).unwrap();
         assert_eq!(first, second);
+    }
+
+    #[test]
+    fn merge_claude_hooks_creates_missing_hooks_key() {
+        // Regression: settings.json with user config but no "hooks" key (issue #2).
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("settings.json");
+        fs::write(
+            &path,
+            r#"{
+  "model": "opus",
+  "permissions": { "allow": ["Bash(npm run:*)"] }
+}"#,
+        )
+        .unwrap();
+
+        merge_claude_hooks(&path).unwrap();
+
+        let content: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+        assert_eq!(content["model"], "opus");
+        assert_eq!(content["permissions"]["allow"][0], "Bash(npm run:*)");
+        let hooks = content.get("hooks").unwrap().as_object().unwrap();
+        assert!(hooks.contains_key("Stop"));
+        assert!(hooks.contains_key("UserPromptSubmit"));
+    }
+
+    #[test]
+    fn merge_claude_hooks_accepts_blank_file() {
+        // Regression: existing but empty settings.json (issue #2).
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("settings.json");
+        fs::write(&path, "").unwrap();
+
+        merge_claude_hooks(&path).unwrap();
+
+        let content: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+        assert!(content.get("hooks").unwrap().as_object().unwrap().contains_key("Stop"));
+    }
+
+    #[test]
+    fn merge_claude_hooks_replaces_null_hooks() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("settings.json");
+        fs::write(&path, r#"{ "hooks": null }"#).unwrap();
+
+        merge_claude_hooks(&path).unwrap();
+
+        let content: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+        assert!(content.get("hooks").unwrap().is_object());
+    }
+
+    #[test]
+    fn merge_claude_hooks_reports_parse_error_with_path() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("settings.json");
+        fs::write(&path, "{ not valid json").unwrap();
+
+        let err = merge_claude_hooks(&path).unwrap_err();
+        assert!(err.to_string().contains("settings.json"));
+    }
+
+    #[test]
+    fn remove_marked_hooks_tolerates_blank_file() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("settings.json");
+        fs::write(&path, "").unwrap();
+
+        remove_marked_hooks(&path, "hooks").unwrap();
+        assert_eq!(fs::read_to_string(&path).unwrap(), "");
     }
 }
