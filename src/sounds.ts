@@ -45,6 +45,9 @@ function playPreset(preset: string): void {
   const t0 = ctx.currentTime;
 
   switch (preset) {
+    case "silent":
+      // Do nothing - silent sound
+      break;
     case "soft-chime":
       playTone(ctx, 523.25, t0, 0.25, 0.12);
       playTone(ctx, 659.25, t0 + 0.12, 0.3, 0.1);
