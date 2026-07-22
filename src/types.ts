@@ -43,6 +43,7 @@ export interface ToolStatus {
 }
 
 export const SOUND_PRESETS = [
+  "silent",
   "soft-chime",
   "double-ping",
   "alert",
